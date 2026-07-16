@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { useAuth } from "@/context/AuthProvider";
+import { hasSupabaseConfig, SUPABASE_CONFIG_ERROR } from "@/lib/supabase";
 
 export default function AuthPage() {
   const { login, register } = useAuth();
@@ -15,10 +16,15 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const configOk = hasSupabaseConfig();
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!configOk) {
+      setError(SUPABASE_CONFIG_ERROR);
+      return;
+    }
     setLoading(true);
     try {
       if (mode === "login") {
@@ -112,12 +118,12 @@ export default function AuthPage() {
               required
             />
           </div>
-          {error && (
+          {(!configOk || error) && (
             <p className="rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-sm text-[var(--danger)]">
-              {error}
+              {!configOk ? SUPABASE_CONFIG_ERROR : error}
             </p>
           )}
-          <button className="btn btn-primary w-full" disabled={loading} type="submit">
+          <button className="btn btn-primary w-full" disabled={loading || !configOk} type="submit">
             {loading ? "Espera…" : mode === "login" ? "Entrar" : "Crear cuenta"}
           </button>
         </form>

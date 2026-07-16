@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Link2, Plus } from "lucide-react";
+import { Link2, Plus, Users } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 
 import { useApp } from "@/context/AppProvider";
@@ -123,6 +123,7 @@ export default function QuinielasPage() {
             const pts = predictions
               .filter((p) => p.quinielaId === q.id && p.userId === user?.id)
               .reduce((acc, p) => acc + (p.pointsEarned ?? 0), 0);
+            const memberCount = q.participants.filter((p) => p.status === "confirmado").length;
             return (
               <Link key={q.id} href={`/quiniela/${q.id}`} className="card block p-4 hover:border-[var(--primary)]/50">
                 <div className="flex items-start justify-between gap-3">
@@ -132,9 +133,15 @@ export default function QuinielasPage() {
                       {q.tournamentName} · {q.status} · código {q.code}
                     </p>
                   </div>
-                  <span className="rounded-lg bg-[var(--elevated)] px-3 py-1 text-sm font-semibold text-[var(--primary)]">
-                    {pts} pts
-                  </span>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <span className="rounded-lg bg-[var(--elevated)] px-3 py-1 text-sm font-semibold text-[var(--primary)]">
+                      {pts} pts
+                    </span>
+                    <span className="flex items-center gap-1 text-xs font-semibold text-[var(--muted)]">
+                      <Users size={12} />
+                      {memberCount} {memberCount === 1 ? "jugador" : "jugadores"}
+                    </span>
+                  </div>
                 </div>
               </Link>
             );

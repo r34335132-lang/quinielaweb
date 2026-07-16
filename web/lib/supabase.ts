@@ -1,19 +1,29 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
 
 export function hasSupabaseConfig() {
   return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    supabaseUrl &&
+      supabaseAnonKey &&
+      !supabaseUrl.includes("placeholder.supabase.co") &&
+      supabaseAnonKey !== "placeholder",
   );
 }
+
+/** Cliente único. Si faltan env vars, las llamadas fallan con mensaje claro. */
+export const supabase: SupabaseClient = createClient(
+  hasSupabaseConfig() ? supabaseUrl : "https://invalid.local",
+  hasSupabaseConfig() ? supabaseAnonKey : "invalid",
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  },
+);
+
+export const SUPABASE_CONFIG_ERROR =
+  "Faltan las variables NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en Vercel. Agrégalas en Settings → Environment Variables y vuelve a desplegar.";

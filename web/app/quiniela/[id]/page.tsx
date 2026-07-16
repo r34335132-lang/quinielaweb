@@ -1,13 +1,14 @@
 "use client";
 
-import { Check, Copy, Share2 } from "lucide-react";
+import { Check, Copy, Lock, Share2, Users } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { TeamBadge } from "@/components/TeamBadge";
 import { useApp } from "@/context/AppProvider";
 import { useAuth } from "@/context/AuthProvider";
 import { inviteUrl } from "@/lib/mappers";
+import { formatLockLabel, isMatchLocked } from "@/lib/match";
 import type { WinnerPick } from "@/lib/types";
 
 export default function QuinielaDetailPage() {
@@ -26,6 +27,13 @@ export default function QuinielaDetailPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [flash, setFlash] = useState("");
+  const [now, setNow] = useState(() => new Date());
+
+  // Refresca el reloj para que el candado de 1 h se aplique solo.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const selectedRound = useMemo(
     () => rounds.find((r) => r.id === quiniela?.roundId),
@@ -47,6 +55,10 @@ export default function QuinielaDetailPage() {
   }
 
   const url = inviteUrl(quiniela.code);
+  const confirmed = quiniela.participants.filter((p) => p.status === "confirmado");
+  const memberNames = confirmed.map(
+    (p) => users.find((u) => u.id === p.userId)?.username ?? "Participante",
+  );
 
   const copy = async () => {
     await navigator.clipboard.writeText(url);
@@ -72,15 +84,18 @@ export default function QuinielaDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{quiniela.name}</h1>
-          <p className="text-sm text-[var(--muted)]">
-            {quiniela.participants.filter((p) => p.status === "confirmado").length} participantes ·{" "}
-            {selectedRound?.name ?? "Sin jornada"}
-          </p>
+          <p className="text-sm text-[var(--muted)]">{selectedRound?.name ?? "Sin jornada"}</p>
         </div>
-        <button className="btn btn-ghost" type="button" onClick={copy}>
-          {copied ? <Check size={16} /> : <Share2 size={16} />}
-          {copied ? "Copiado" : "Compartir link"}
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-lg border border-[var(--primary)]/40 bg-[var(--primary)]/15 px-3 py-2 text-sm font-semibold text-[var(--primary)]">
+            <Users size={15} />
+            {confirmed.length} {confirmed.length === 1 ? "participante" : "participantes"}
+          </span>
+          <button className="btn btn-ghost" type="button" onClick={copy}>
+            {copied ? <Check size={16} /> : <Share2 size={16} />}
+            {copied ? "Copiado" : "Compartir link"}
+          </button>
+        </div>
       </div>
 
       <div className="card flex flex-wrap items-center gap-3 p-4">
@@ -91,6 +106,34 @@ export default function QuinielaDetailPage() {
           <p className="text-xs text-[var(--muted)]">Código: {quiniela.code}</p>
         </div>
       </div>
+
+      <section className="card p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <Users size={16} className="text-[var(--primary)]" />
+          <h2 className="font-bold">Quiénes están jugando ({confirmed.length})</h2>
+        </div>
+        {memberNames.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">
+            Aún no hay participantes confirmados. Comparte el link para invitar.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {memberNames.map((name, i) => (
+              <span
+                key={`${name}-${i}`}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                  name === user?.username
+                    ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+                    : "bg-[var(--elevated)] text-[var(--text)]"
+                }`}
+              >
+                {name}
+                {name === user?.username ? " (Tú)" : ""}
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
 
       {flash && (
         <p className="rounded-xl border border-[var(--success)]/30 bg-[var(--success)]/10 px-4 py-2 text-sm text-[var(--success)]">
@@ -136,7 +179,8 @@ export default function QuinielaDetailPage() {
                 p.quinielaId === quiniela.id &&
                 p.userId === user?.id,
             );
-            const locked = ["live", "finished", "cancelled"].includes(match.status);
+            const locked = isMatchLocked(match, now);
+            const revealed = match.status !== "pending";
             const groupPreds = predictions.filter(
               (p) => p.matchId === match.id && p.quinielaId === quiniela.id,
             );
@@ -174,6 +218,14 @@ export default function QuinielaDetailPage() {
                     )}
                     <p className="text-xs text-[var(--muted)]">
                       {match.date} {match.time}
+                    </p>
+                    <p
+                      className={`mt-1 flex items-center justify-center gap-1 text-xs font-semibold ${
+                        locked ? "text-[var(--danger)]" : "text-[var(--warning)]"
+                      }`}
+                    >
+                      {locked && <Lock size={11} />}
+                      {formatLockLabel(match, now)}
                     </p>
                   </div>
                   <div className="flex flex-1 flex-col items-center gap-2">
@@ -220,7 +272,7 @@ export default function QuinielaDetailPage() {
                       {quiniela.participants.filter((p) => p.status === "confirmado").length}
                     </span>
                   </div>
-                  {!locked ? (
+                  {!revealed ? (
                     <p className="text-sm text-[var(--muted)]">
                       Se revelan cuando inicie el partido.
                     </p>

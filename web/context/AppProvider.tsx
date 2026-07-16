@@ -19,6 +19,7 @@ import {
   mapTeam,
   mapTournament,
 } from "@/lib/mappers";
+import { isMatchLocked } from "@/lib/match";
 import { supabase } from "@/lib/supabase";
 import type {
   LeaderboardEntry,
@@ -224,8 +225,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (input: { matchId: string; quinielaId: string; winner: WinnerPick }) => {
       if (!user) return;
       const match = matches.find((m) => m.id === input.matchId);
-      if (match && ["live", "finished", "cancelled"].includes(match.status)) {
-        throw new Error("Este partido ya está cerrado");
+      if (match && isMatchLocked(match)) {
+        throw new Error("Los pronósticos cierran 1 hora antes del partido");
       }
       const homeScore = input.winner === "home" ? 1 : 0;
       const awayScore = input.winner === "away" ? 1 : 0;
