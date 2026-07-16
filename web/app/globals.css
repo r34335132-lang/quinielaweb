@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #070d1f;
+  --text: #f0f6ff;
+  --card: #0f1729;
+  --elevated: #182038;
+  --primary: #00c4ff;
+  --primary-fg: #000d1a;
+  --secondary: #7b61ff;
+  --muted: #8899bb;
+  --border: #1e2a45;
+  --success: #00e676;
+  --warning: #ffb800;
+  --danger: #ff4560;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--font-outfit);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(0, 196, 255, 0.16), transparent 60%),
+    radial-gradient(900px 400px at 90% 0%, rgba(123, 97, 255, 0.12), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font-outfit), system-ui, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  padding: 0.7rem 1rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.btn-ghost {
+  background: var(--elevated);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+  color: var(--text);
+  padding: 0.75rem 0.9rem;
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--muted);
+}
