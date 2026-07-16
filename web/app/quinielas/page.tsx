@@ -123,7 +123,9 @@ export default function QuinielasPage() {
             const pts = predictions
               .filter((p) => p.quinielaId === q.id && p.userId === user?.id)
               .reduce((acc, p) => acc + (p.pointsEarned ?? 0), 0);
-            const memberCount = q.participants.filter((p) => p.status === "confirmado").length;
+            const memberCount = q.participants.filter(
+              (p) => p.status === "confirmado" || p.status === "pendiente",
+            ).length;
             return (
               <Link key={q.id} href={`/quiniela/${q.id}`} className="card block p-4 hover:border-[var(--primary)]/50">
                 <div className="flex items-start justify-between gap-3">

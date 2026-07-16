@@ -55,10 +55,15 @@ export default function QuinielaDetailPage() {
   }
 
   const url = inviteUrl(quiniela.code);
-  const confirmed = quiniela.participants.filter((p) => p.status === "confirmado");
-  const memberNames = confirmed.map(
-    (p) => users.find((u) => u.id === p.userId)?.username ?? "Participante",
+  // Incluye confirmados y pendientes (no eliminados/rechazados)
+  const members = quiniela.participants.filter(
+    (p) => p.status === "confirmado" || p.status === "pendiente",
   );
+  const memberRows = members.map((p) => ({
+    userId: p.userId,
+    username: users.find((u) => u.id === p.userId)?.username ?? "Participante",
+    status: p.status,
+  }));
 
   const copy = async () => {
     await navigator.clipboard.writeText(url);
@@ -89,7 +94,7 @@ export default function QuinielaDetailPage() {
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 rounded-lg border border-[var(--primary)]/40 bg-[var(--primary)]/15 px-3 py-2 text-sm font-semibold text-[var(--primary)]">
             <Users size={15} />
-            {confirmed.length} {confirmed.length === 1 ? "participante" : "participantes"}
+            {members.length} {members.length === 1 ? "participante" : "participantes"}
           </span>
           <button className="btn btn-ghost" type="button" onClick={copy}>
             {copied ? <Check size={16} /> : <Share2 size={16} />}
@@ -110,25 +115,26 @@ export default function QuinielaDetailPage() {
       <section className="card p-4">
         <div className="mb-2 flex items-center gap-2">
           <Users size={16} className="text-[var(--primary)]" />
-          <h2 className="font-bold">Quiénes están jugando ({confirmed.length})</h2>
+          <h2 className="font-bold">Quiénes están jugando ({members.length})</h2>
         </div>
-        {memberNames.length === 0 ? (
+        {memberRows.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">
-            Aún no hay participantes confirmados. Comparte el link para invitar.
+            Aún no hay participantes. Comparte el link para invitar.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {memberNames.map((name, i) => (
+            {memberRows.map((m) => (
               <span
-                key={`${name}-${i}`}
+                key={m.userId}
                 className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
-                  name === user?.username
+                  m.userId === user?.id
                     ? "bg-[var(--primary)]/20 text-[var(--primary)]"
                     : "bg-[var(--elevated)] text-[var(--text)]"
                 }`}
               >
-                {name}
-                {name === user?.username ? " (Tú)" : ""}
+                {m.username}
+                {m.userId === user?.id ? " (Tú)" : ""}
+                {m.status === "pendiente" ? " · pendiente" : ""}
               </span>
             ))}
           </div>
@@ -268,8 +274,7 @@ export default function QuinielaDetailPage() {
                   <div className="mb-2 flex justify-between text-sm">
                     <span className="font-semibold">Elecciones del grupo</span>
                     <span className="text-[var(--muted)]">
-                      {groupPreds.length}/
-                      {quiniela.participants.filter((p) => p.status === "confirmado").length}
+                      {groupPreds.length}/{members.length}
                     </span>
                   </div>
                   {!revealed ? (
