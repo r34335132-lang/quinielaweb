@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Lock, Share2, Users } from "lucide-react";
+import { Check, Copy, Lock, Share2, Users, X } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -9,6 +9,7 @@ import { useApp } from "@/context/AppProvider";
 import { useAuth } from "@/context/AuthProvider";
 import { inviteUrl } from "@/lib/mappers";
 import { formatLockLabel, isMatchLocked } from "@/lib/match";
+import { matchActualWinner } from "@/lib/scoring";
 import type { WinnerPick } from "@/lib/types";
 
 export default function QuinielaDetailPage() {
@@ -29,7 +30,6 @@ export default function QuinielaDetailPage() {
   const [flash, setFlash] = useState("");
   const [now, setNow] = useState(() => new Date());
 
-  // Refresca el reloj para que el candado de 1 h se aplique solo.
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(timer);
@@ -55,7 +55,6 @@ export default function QuinielaDetailPage() {
   }
 
   const url = inviteUrl(quiniela.code);
-  // Incluye confirmados y pendientes (no eliminados/rechazados)
   const members = quiniela.participants.filter(
     (p) => p.status === "confirmado" || p.status === "pendiente",
   );
@@ -82,6 +81,13 @@ export default function QuinielaDetailPage() {
     } finally {
       setSavingId(null);
     }
+  };
+
+  const pickLabel = (winner: WinnerPick | undefined, homeName: string, awayName: string) => {
+    if (winner === "home") return homeName;
+    if (winner === "away") return awayName;
+    if (winner === "draw") return "Empate";
+    return "Sin elegir";
   };
 
   return (
@@ -151,7 +157,9 @@ export default function QuinielaDetailPage() {
         <h2 className="mb-3 text-lg font-bold">Ranking</h2>
         <div className="space-y-2">
           {leaderboard.length === 0 && (
-            <p className="text-sm text-[var(--muted)]">Aún no hay puntos calculados.</p>
+            <p className="text-sm text-[var(--muted)]">
+              Los puntos aparecen cuando el admin captura el resultado de cada partido.
+            </p>
           )}
           {leaderboard.map((entry) => (
             <div
@@ -186,20 +194,12 @@ export default function QuinielaDetailPage() {
                 p.userId === user?.id,
             );
             const locked = isMatchLocked(match, now);
-            const revealed = match.status !== "pending";
+            const finished = match.status === "finished";
             const groupPreds = predictions.filter(
               (p) => p.matchId === match.id && p.quinielaId === quiniela.id,
             );
-            const actual: WinnerPick | undefined =
-              match.status === "finished" &&
-              match.homeScore !== undefined &&
-              match.awayScore !== undefined
-                ? match.homeScore > match.awayScore
-                  ? "home"
-                  : match.awayScore > match.homeScore
-                    ? "away"
-                    : "draw"
-                : undefined;
+            const actual = matchActualWinner(match);
+            const myOk = finished && actual && myPred?.winner ? myPred.winner === actual : undefined;
 
             const choices: { value: WinnerPick; label: string; color: string }[] = [
               { value: "home", label: `Gana ${home.shortName}`, color: home.primaryColor },
@@ -215,7 +215,7 @@ export default function QuinielaDetailPage() {
                     <span className="text-center text-sm font-semibold">{home.name}</span>
                   </div>
                   <div className="text-center">
-                    {match.status === "finished" ? (
+                    {finished ? (
                       <p className="text-2xl font-bold">
                         {match.homeScore} - {match.awayScore}
                       </p>
@@ -240,33 +240,99 @@ export default function QuinielaDetailPage() {
                   </div>
                 </div>
 
+                {finished && (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-sm ${
+                      myOk === true
+                        ? "border-[var(--success)]/40 bg-[var(--success)]/10 text-[var(--success)]"
+                        : myOk === false
+                          ? "border-[var(--danger)]/40 bg-[var(--danger)]/10 text-[var(--danger)]"
+                          : "border-[var(--border)] bg-[var(--elevated)] text-[var(--muted)]"
+                    }`}
+                  >
+                    <p className="font-semibold">
+                      {myOk === true
+                        ? "¡Acertaste!"
+                        : myOk === false
+                          ? "No acertaste"
+                          : "Sin pronóstico"}
+                    </p>
+                    <p className="mt-1">
+                      Elegiste:{" "}
+                      <strong>{pickLabel(myPred?.winner, home.name, away.name)}</strong>
+                      {" · "}
+                      Resultado:{" "}
+                      <strong>
+                        {actual
+                          ? pickLabel(actual, home.name, away.name)
+                          : "—"}
+                      </strong>
+                    </p>
+                    {myPred?.isCalculated && (
+                      <p className="mt-1 font-bold">
+                        +{myPred.pointsEarned ?? 0} pts
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid gap-2">
                   {choices.map((c) => {
                     const selected = myPred?.winner === c.value;
+                    const showResult = finished && selected && actual !== undefined;
+                    const isCorrect = showResult && c.value === actual;
+                    const isWrong = showResult && c.value !== actual;
+                    const borderColor = isCorrect
+                      ? "var(--success)"
+                      : isWrong
+                        ? "var(--danger)"
+                        : selected
+                          ? c.color
+                          : "var(--border)";
+                    const bg = isCorrect
+                      ? "color-mix(in srgb, var(--success) 18%, transparent)"
+                      : isWrong
+                        ? "color-mix(in srgb, var(--danger) 18%, transparent)"
+                        : selected
+                          ? `${c.color}22`
+                          : "var(--elevated)";
+                    const textColor = isCorrect
+                      ? "var(--success)"
+                      : isWrong
+                        ? "var(--danger)"
+                        : selected
+                          ? c.color
+                          : "var(--text)";
+
                     return (
                       <button
                         key={c.value}
                         type="button"
-                        disabled={locked || savingId === match.id}
+                        disabled={locked || savingId === match.id || finished}
                         onClick={() => pick(match.id, c.value)}
                         className="flex items-center gap-3 rounded-xl border px-4 py-3 text-left font-semibold disabled:opacity-50"
                         style={{
-                          borderColor: selected ? c.color : "var(--border)",
-                          background: selected ? `${c.color}22` : "var(--elevated)",
-                          color: selected ? c.color : "var(--text)",
+                          borderColor,
+                          background: bg,
+                          color: textColor,
                         }}
                       >
                         {c.label}
-                        {selected && <Check size={16} className="ml-auto" />}
+                        {isCorrect && <Check size={16} className="ml-auto" />}
+                        {isWrong && <X size={16} className="ml-auto" />}
+                        {!finished && selected && <Check size={16} className="ml-auto" />}
                       </button>
                     );
                   })}
                 </div>
 
-                {myPred?.isCalculated && (
+                {!finished && myPred?.winner && (
                   <p className="text-sm text-[var(--muted)]">
-                    Tus puntos en este partido:{" "}
-                    <strong className="text-[var(--primary)]">+{myPred.pointsEarned ?? 0}</strong>
+                    Tu elección:{" "}
+                    <strong className="text-[var(--text)]">
+                      {pickLabel(myPred.winner, home.name, away.name)}
+                    </strong>
+                    . Los puntos se muestran cuando termine el partido.
                   </p>
                 )}
 
@@ -277,41 +343,39 @@ export default function QuinielaDetailPage() {
                       {groupPreds.length}/{members.length}
                     </span>
                   </div>
-                  {!revealed ? (
+                  {!finished ? (
                     <p className="text-sm text-[var(--muted)]">
-                      Se revelan cuando inicie el partido.
+                      Se revelan cuando el partido termine y el admin capture el resultado.
                     </p>
                   ) : (
                     <div className="space-y-1">
                       {groupPreds.map((p) => {
                         const name =
                           users.find((u) => u.id === p.userId)?.username ?? "Participante";
-                        const label =
-                          p.winner === "home"
-                            ? home.name
-                            : p.winner === "away"
-                              ? away.name
-                              : p.winner === "draw"
-                                ? "Empate"
-                                : "—";
+                        const label = pickLabel(p.winner, home.name, away.name);
                         const ok = actual && p.winner === actual;
+                        const pts =
+                          p.isCalculated && p.pointsEarned !== undefined
+                            ? ` · +${p.pointsEarned}`
+                            : "";
                         return (
                           <div key={p.id} className="flex justify-between text-sm">
                             <span>{name}</span>
-                            <span className={ok ? "text-[var(--success)]" : "text-[var(--muted)]"}>
+                            <span
+                              className={
+                                ok ? "font-semibold text-[var(--success)]" : "text-[var(--danger)]"
+                              }
+                            >
                               {label}
+                              {ok ? " ✓" : " ✗"}
+                              {pts}
                             </span>
                           </div>
                         );
                       })}
                       {actual && (
                         <p className="mt-2 text-sm font-semibold text-[var(--primary)]">
-                          Resultado:{" "}
-                          {actual === "home"
-                            ? home.name
-                            : actual === "away"
-                              ? away.name
-                              : "Empate"}
+                          Resultado oficial: {pickLabel(actual, home.name, away.name)}
                         </p>
                       )}
                     </div>

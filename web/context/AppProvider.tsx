@@ -20,6 +20,7 @@ import {
   mapTournament,
 } from "@/lib/mappers";
 import { isMatchLocked } from "@/lib/match";
+import { pointsForPick, winnerFromScores } from "@/lib/scoring";
 import { supabase } from "@/lib/supabase";
 import type {
   LeaderboardEntry,
@@ -262,20 +263,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
         .eq("id", matchId);
       if (error) throw error;
+
+      // Si el partido deja de estar finalizado, limpia puntos de ese partido.
+      if (updates.status !== "finished") {
+        await supabase
+          .from("predictions")
+          .update({
+            points_earned: null,
+            is_result_correct: null,
+            is_calculated: false,
+          })
+          .eq("match_id", matchId);
+      }
+
       await refresh();
     },
     [refresh],
   );
+
+  /** Calcula 1 pt por acierto 1X2 en el cliente (fallback si no hay RPC). */
+  const recalculatePointsLocally = useCallback(async (matchId: string) => {
+    const { data: matchRow, error: matchErr } = await supabase
+      .from("matches")
+      .select("id, status, home_score, away_score")
+      .eq("id", matchId)
+      .single();
+    if (matchErr) throw matchErr;
+    if (matchRow.status !== "finished") {
+      throw new Error("El partido debe estar finalizado para sumar puntos.");
+    }
+    const homeScore = Number(matchRow.home_score ?? 0);
+    const awayScore = Number(matchRow.away_score ?? 0);
+    const actual = winnerFromScores(homeScore, awayScore);
+
+    const { data: preds, error: predErr } = await supabase
+      .from("predictions")
+      .select("id, winner, user_id")
+      .eq("match_id", matchId);
+    if (predErr) throw predErr;
+
+    for (const pred of preds ?? []) {
+      const { correct, points } = pointsForPick(
+        (pred.winner as WinnerPick | null) ?? undefined,
+        actual,
+      );
+      const { error } = await supabase
+        .from("predictions")
+        .update({
+          points_earned: points,
+          is_result_correct: correct,
+          is_calculated: true,
+        })
+        .eq("id", pred.id);
+      if (error) throw error;
+    }
+  }, []);
 
   const recalculatePoints = useCallback(
     async (matchId: string) => {
       const { error } = await supabase.rpc("recalculate_match_points", {
         target_match_id: matchId,
       });
-      if (error) throw error;
+      if (error) {
+        // Si la función no existe o falla, suma puntos en el cliente.
+        await recalculatePointsLocally(matchId);
+      }
       await Promise.all([refresh(), refreshUsers()]);
     },
-    [refresh, refreshUsers],
+    [refresh, refreshUsers, recalculatePointsLocally],
   );
 
   const updateQ = useCallback(

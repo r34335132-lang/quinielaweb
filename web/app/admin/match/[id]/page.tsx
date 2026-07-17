@@ -8,7 +8,13 @@ import { useState } from "react";
 import { TeamBadge } from "@/components/TeamBadge";
 import { useApp } from "@/context/AppProvider";
 import { useAuth } from "@/context/AuthProvider";
+import { winnerFromScores } from "@/lib/scoring";
 import type { Match } from "@/lib/types";
+
+function defaultStatus(current?: Match["status"]): Match["status"] {
+  if (!current || current === "pending" || current === "live") return "finished";
+  return current;
+}
 
 export default function AdminMatchResultPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,11 +25,12 @@ export default function AdminMatchResultPage() {
   const home = match ? teams.find((t) => t.id === match.homeTeamId) : undefined;
   const away = match ? teams.find((t) => t.id === match.awayTeamId) : undefined;
 
-  const [status, setStatus] = useState<Match["status"]>(match?.status ?? "pending");
+  const [status, setStatus] = useState<Match["status"]>(defaultStatus(match?.status));
   const [homeScore, setHomeScore] = useState(match?.homeScore ?? 0);
   const [awayScore, setAwayScore] = useState(match?.awayScore ?? 0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [errMsg, setErrMsg] = useState("");
 
   if (user?.role !== "administrador") {
     return <p className="text-[var(--muted)]">Acceso solo admin.</p>;
@@ -32,20 +39,29 @@ export default function AdminMatchResultPage() {
     return <p className="text-[var(--muted)]">Partido no encontrado.</p>;
   }
 
+  const outcome = winnerFromScores(homeScore, awayScore);
+  const outcomeLabel =
+    outcome === "home"
+      ? `Gana ${home.shortName}`
+      : outcome === "away"
+        ? `Gana ${away.shortName}`
+        : "Empate";
+
   const save = async () => {
     setBusy(true);
     setMsg("");
+    setErrMsg("");
     try {
       await updateMatchResult(match.id, { status, homeScore, awayScore });
       if (status === "finished") {
         await recalculatePoints(match.id);
-        setMsg("Resultado guardado y puntos recalculados (1 pt por acierto).");
+        setMsg("Resultado guardado. Los jugadores ya ven si acertaron y sumaron puntos.");
       } else {
         setMsg("Partido actualizado.");
       }
-      setTimeout(() => router.push("/admin"), 800);
+      setTimeout(() => router.push("/admin"), 900);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Error al guardar");
+      setErrMsg(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setBusy(false);
     }
@@ -56,7 +72,12 @@ export default function AdminMatchResultPage() {
       <Link href="/admin" className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
         <ArrowLeft size={16} /> Admin
       </Link>
-      <h1 className="text-2xl font-bold">Capturar resultado</h1>
+      <div>
+        <h1 className="text-2xl font-bold">Capturar resultado</h1>
+        <p className="text-sm text-[var(--muted)]">
+          Al guardar como finalizado se calcula 1 punto por cada pronóstico acertado.
+        </p>
+      </div>
 
       <div className="card flex items-center justify-between gap-4 p-5">
         <div className="flex flex-col items-center gap-2">
@@ -90,20 +111,19 @@ export default function AdminMatchResultPage() {
           <Stepper label={home.shortName} value={homeScore} onChange={setHomeScore} />
           <Stepper label={away.shortName} value={awayScore} onChange={setAwayScore} />
         </div>
-        <p className="text-sm text-[var(--muted)]">
-          Resultado 1X2:{" "}
-          <strong className="text-[var(--text)]">
-            {homeScore > awayScore
-              ? `Gana ${home.shortName}`
-              : awayScore > homeScore
-                ? `Gana ${away.shortName}`
-                : "Empate"}
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-4 py-3 text-sm">
+          Resultado 1X2: <strong className="text-[var(--text)]">{outcomeLabel}</strong>
+          {" · "}
+          Marcador{" "}
+          <strong>
+            {homeScore} - {awayScore}
           </strong>
         </p>
         <button className="btn btn-primary w-full" disabled={busy} type="button" onClick={save}>
-          Guardar y sumar puntos
+          {busy ? "Guardando…" : "Guardar resultado y sumar puntos"}
         </button>
         {msg && <p className="text-sm text-[var(--success)]">{msg}</p>}
+        {errMsg && <p className="text-sm text-[var(--danger)]">{errMsg}</p>}
       </div>
     </div>
   );

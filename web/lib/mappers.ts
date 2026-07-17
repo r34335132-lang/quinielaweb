@@ -129,6 +129,8 @@ export function buildLeaderboard(
   >();
 
   for (const pred of filtered) {
+    // Solo cuentan puntos de partidos ya finalizados y calculados.
+    if (!pred.isCalculated) continue;
     const current = stats.get(pred.userId) ?? {
       totalPoints: 0,
       totalPredictions: 0,

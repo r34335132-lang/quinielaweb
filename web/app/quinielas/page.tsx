@@ -121,7 +121,12 @@ export default function QuinielasPage() {
         <div className="grid gap-3">
           {myQuinielas.map((q) => {
             const pts = predictions
-              .filter((p) => p.quinielaId === q.id && p.userId === user?.id)
+              .filter(
+                (p) =>
+                  p.quinielaId === q.id &&
+                  p.userId === user?.id &&
+                  p.isCalculated === true,
+              )
               .reduce((acc, p) => acc + (p.pointsEarned ?? 0), 0);
             const memberCount = q.participants.filter(
               (p) => p.status === "confirmado" || p.status === "pendiente",
