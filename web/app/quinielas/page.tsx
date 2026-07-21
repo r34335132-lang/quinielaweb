@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Link2, Plus, Users } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 
 import { useApp } from "@/context/AppProvider";
 import { useAuth } from "@/context/AuthProvider";
@@ -30,15 +30,9 @@ export default function QuinielasPage() {
     name: "",
     organizerName: user?.username ?? "",
     tournamentId: "",
-    roundId: "",
     quinielaType: "amigos" as QuinielaType,
     rules: "",
   });
-
-  const availableRounds = useMemo(
-    () => rounds.filter((r) => r.tournamentId === form.tournamentId && !r.isClosed),
-    [rounds, form.tournamentId],
-  );
 
   const join = async (e: FormEvent) => {
     e.preventDefault();
@@ -62,8 +56,15 @@ export default function QuinielasPage() {
   const create = async (e: FormEvent) => {
     e.preventDefault();
     const tournament = tournaments.find((t) => t.id === form.tournamentId);
-    if (!tournament || !form.roundId || !form.name.trim()) {
-      setMsg("Completa nombre, liga y jornada.");
+    const firstRound = rounds
+      .filter((r) => r.tournamentId === form.tournamentId)
+      .sort((a, b) => a.number - b.number)[0];
+    if (!tournament || !form.name.trim()) {
+      setMsg("Completa nombre y liga.");
+      return;
+    }
+    if (!firstRound) {
+      setMsg("Esta liga aún no tiene jornadas. Pide al admin que las cree.");
       return;
     }
     setBusy(true);
@@ -74,7 +75,7 @@ export default function QuinielasPage() {
         organizerName: form.organizerName.trim() || user?.username || "Organizador",
         tournamentId: tournament.id,
         tournamentName: tournament.name,
-        roundId: form.roundId,
+        roundId: firstRound.id,
         quinielaType: form.quinielaType,
         rules: form.rules.trim() || undefined,
       });
@@ -190,7 +191,7 @@ export default function QuinielasPage() {
               <select
                 className="input"
                 value={form.tournamentId}
-                onChange={(e) => setForm({ ...form, tournamentId: e.target.value, roundId: "" })}
+                onChange={(e) => setForm({ ...form, tournamentId: e.target.value })}
                 required
               >
                 <option value="">Selecciona…</option>
@@ -200,22 +201,9 @@ export default function QuinielasPage() {
                   </option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="label">Jornada</label>
-              <select
-                className="input"
-                value={form.roundId}
-                onChange={(e) => setForm({ ...form, roundId: e.target.value })}
-                required
-              >
-                <option value="">Selecciona…</option>
-                {availableRounds.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Incluye todas las jornadas de la liga.
+              </p>
             </div>
             <button className="btn btn-primary w-full" disabled={busy} type="submit">
               Crear (modo fácil)

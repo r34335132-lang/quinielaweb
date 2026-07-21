@@ -35,13 +35,21 @@ export default function QuinielaDetailPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const selectedRound = useMemo(
-    () => rounds.find((r) => r.id === quiniela?.roundId),
-    [rounds, quiniela?.roundId],
-  );
-  const roundMatches = useMemo(
-    () => (selectedRound ? matches.filter((m) => m.roundId === selectedRound.id) : []),
-    [matches, selectedRound],
+  const roundsWithMatches = useMemo(() => {
+    if (!quiniela) return [];
+    return rounds
+      .filter((r) => r.tournamentId === quiniela.tournamentId)
+      .sort((a, b) => a.number - b.number)
+      .map((round) => ({
+        round,
+        matches: matches
+          .filter((m) => m.roundId === round.id)
+          .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)),
+      }));
+  }, [quiniela, rounds, matches]);
+  const totalMatches = useMemo(
+    () => roundsWithMatches.reduce((acc, item) => acc + item.matches.length, 0),
+    [roundsWithMatches],
   );
   const leaderboard = useMemo(() => {
     if (!quiniela) return [];
@@ -95,7 +103,9 @@ export default function QuinielaDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{quiniela.name}</h1>
-          <p className="text-sm text-[var(--muted)]">{selectedRound?.name ?? "Sin jornada"}</p>
+          <p className="text-sm text-[var(--muted)]">
+            {quiniela.tournamentName ?? "Liga"} · Todas las jornadas
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 rounded-lg border border-[var(--primary)]/40 bg-[var(--primary)]/15 px-3 py-2 text-sm font-semibold text-[var(--primary)]">
@@ -182,8 +192,20 @@ export default function QuinielaDetailPage() {
 
       <section>
         <h2 className="mb-3 text-lg font-bold">Partidos · ¿Quién gana?</h2>
-        <div className="space-y-4">
-          {roundMatches.map((match) => {
+        <div className="space-y-8">
+          {roundsWithMatches.map(({ round, matches: roundMatches }) => (
+            <div key={round.id} className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-base font-bold">{round.name}</h3>
+                <span className="text-xs text-[var(--muted)]">
+                  {roundMatches.length} {roundMatches.length === 1 ? "partido" : "partidos"}
+                </span>
+              </div>
+              {roundMatches.length === 0 ? (
+                <p className="text-sm text-[var(--muted)]">No hay partidos en esta jornada.</p>
+              ) : (
+                <div className="space-y-4">
+                  {roundMatches.map((match) => {
             const home = teams.find((t) => t.id === match.homeTeamId);
             const away = teams.find((t) => t.id === match.awayTeamId);
             if (!home || !away) return null;
@@ -384,8 +406,12 @@ export default function QuinielaDetailPage() {
               </div>
             );
           })}
-          {roundMatches.length === 0 && (
-            <p className="text-[var(--muted)]">No hay partidos en esta jornada.</p>
+                </div>
+              )}
+            </div>
+          ))}
+          {totalMatches === 0 && (
+            <p className="text-[var(--muted)]">No hay partidos en esta liga.</p>
           )}
         </div>
       </section>
