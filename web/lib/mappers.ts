@@ -121,8 +121,14 @@ export function buildLeaderboard(
   users: User[],
   predictions: Prediction[],
   quinielaId: string,
+  options?: { matchIds?: string[]; userIds?: string[] },
 ): LeaderboardEntry[] {
-  const filtered = predictions.filter((p) => p.quinielaId === quinielaId);
+  const matchIdSet = options?.matchIds ? new Set(options.matchIds) : null;
+  const filtered = predictions.filter((p) => {
+    if (p.quinielaId !== quinielaId) return false;
+    if (matchIdSet && !matchIdSet.has(p.matchId)) return false;
+    return true;
+  });
   const stats = new Map<
     string,
     { totalPoints: number; totalPredictions: number; correctPredictions: number }
@@ -142,10 +148,17 @@ export function buildLeaderboard(
     stats.set(pred.userId, current);
   }
 
-  return users
-    .filter((u) => stats.has(u.id))
+  const pool = options?.userIds
+    ? users.filter((u) => options.userIds!.includes(u.id))
+    : users.filter((u) => stats.has(u.id));
+
+  return pool
     .map((u) => {
-      const s = stats.get(u.id)!;
+      const s = stats.get(u.id) ?? {
+        totalPoints: 0,
+        totalPredictions: 0,
+        correctPredictions: 0,
+      };
       return {
         userId: u.id,
         username: u.username,
@@ -155,7 +168,7 @@ export function buildLeaderboard(
         rank: 0,
       };
     })
-    .sort((a, b) => b.totalPoints - a.totalPoints)
+    .sort((a, b) => b.totalPoints - a.totalPoints || b.correctPredictions - a.correctPredictions)
     .map((e, i) => ({ ...e, rank: i + 1 }));
 }
 

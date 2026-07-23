@@ -7,10 +7,10 @@ import { useEffect, useMemo, useState } from "react";
 import { TeamBadge } from "@/components/TeamBadge";
 import { useApp } from "@/context/AppProvider";
 import { useAuth } from "@/context/AuthProvider";
-import { inviteUrl } from "@/lib/mappers";
+import { inviteUrl, buildLeaderboard } from "@/lib/mappers";
 import { formatLockLabel, isMatchLocked } from "@/lib/match";
 import { matchActualWinner } from "@/lib/scoring";
-import type { Match, Round, Team, WinnerPick } from "@/lib/types";
+import type { LeaderboardEntry, Match, Round, Team, WinnerPick } from "@/lib/types";
 
 type Tab = "pronosticos" | "ranking";
 
@@ -23,7 +23,6 @@ export default function QuinielaDetailPage() {
     teams,
     rounds,
     predictions,
-    getLeaderboard,
     savePrediction,
   } = useApp();
   const quiniela = quinielas.find((q) => q.id === id);
@@ -69,12 +68,35 @@ export default function QuinielaDetailPage() {
 
   const selectedRound = tournamentRounds.find((r) => r.id === selectedRoundId);
 
+  const confirmedUserIds = useMemo(
+    () =>
+      quiniela?.participants
+        .filter((p) => p.status === "confirmado")
+        .map((p) => p.userId) ?? [],
+    [quiniela],
+  );
+
   const leaderboard = useMemo(() => {
     if (!quiniela) return [];
-    return getLeaderboard(quiniela.id).filter((e) =>
-      quiniela.participants.some((p) => p.userId === e.userId && p.status === "confirmado"),
-    );
-  }, [quiniela, getLeaderboard]);
+    return buildLeaderboard(users, predictions, quiniela.id, {
+      userIds: confirmedUserIds,
+    });
+  }, [quiniela, users, predictions, confirmedUserIds]);
+
+  const roundLeaderboards = useMemo(() => {
+    if (!quiniela) return [];
+    return roundsWithMatches.map(({ round, matches: roundMatches }) => {
+      const finishedCount = roundMatches.filter((m) => m.status === "finished").length;
+      return {
+        round,
+        finishedCount,
+        entries: buildLeaderboard(users, predictions, quiniela.id, {
+          matchIds: roundMatches.map((m) => m.id),
+          userIds: confirmedUserIds,
+        }),
+      };
+    });
+  }, [quiniela, roundsWithMatches, users, predictions, confirmedUserIds]);
 
   if (!quiniela) {
     return <p className="text-[var(--muted)]">Quiniela no encontrada.</p>;
@@ -248,100 +270,66 @@ export default function QuinielaDetailPage() {
 
       {tab === "ranking" && (
         <>
-          <section>
-            <h2 className="mb-1 text-lg font-bold">Ranking</h2>
-            <p className="mb-3 text-sm text-[var(--muted)]">
-              Los puntos se suman cuando el admin captura el resultado de cada partido.
-            </p>
-            <div className="space-y-2">
-              {leaderboard.length === 0 && (
-                <p className="text-sm text-[var(--muted)]">
-                  Aún no hay puntos. Juega tus pronósticos y espera los resultados.
-                </p>
-              )}
-              {leaderboard.map((entry) => (
-                <div
-                  key={entry.userId}
-                  className={`card flex items-center gap-3 px-4 py-3 ${
-                    entry.userId === user?.id
-                      ? "border-[var(--primary)]/50 bg-[var(--primary)]/10"
-                      : ""
-                  }`}
-                >
-                  <span className="w-8 font-bold text-[var(--muted)]">#{entry.rank}</span>
-                  <span className="flex-1 font-semibold">
-                    {entry.username}
-                    {entry.userId === user?.id ? " (Tú)" : ""}
-                  </span>
-                  <span className="text-sm text-[var(--muted)]">
-                    {entry.correctPredictions} aciertos
-                  </span>
-                  <span className="font-bold text-[var(--primary)]">{entry.totalPoints} pts</span>
-                </div>
-              ))}
-            </div>
-          </section>
+          <LeaderboardSection
+            title="Ranking general"
+            subtitle="Suma de todas las jornadas con resultados capturados."
+            entries={leaderboard}
+            currentUserId={user?.id}
+            emptyMessage="Aún no hay puntos. Juega tus pronósticos y espera los resultados."
+            showWinner
+          />
 
           <section className="space-y-4">
-            <h2 className="text-lg font-bold">Resultados por jornada</h2>
-            {roundsWithMatches.map(({ round, matches: roundMatches }) =>
-              roundMatches.length === 0 ? null : (
-                <div key={round.id} className="space-y-3">
-                  <h3 className="font-bold text-[var(--muted)]">{round.name}</h3>
-                  <div className="space-y-3">
-                    {roundMatches
-                      .filter((m) => m.status === "finished")
-                      .map((match) => {
-                        const home = teams.find((t) => t.id === match.homeTeamId);
-                        const away = teams.find((t) => t.id === match.awayTeamId);
-                        if (!home || !away) return null;
-                        const myPred = predictions.find(
-                          (p) =>
-                            p.matchId === match.id &&
-                            p.quinielaId === quiniela.id &&
-                            p.userId === user?.id,
-                        );
-                        const actual = matchActualWinner(match);
-                        const ok =
-                          actual && myPred?.winner ? myPred.winner === actual : undefined;
-                        return (
-                          <div key={match.id} className="card flex flex-wrap items-center gap-3 p-3">
-                            <div className="flex min-w-[140px] flex-1 items-center gap-2 text-sm font-semibold">
-                              <TeamBadge team={home} size={28} />
-                              {home.shortName}
-                              <span className="text-[var(--muted)]">
-                                {match.homeScore} - {match.awayScore}
-                              </span>
-                              {away.shortName}
-                              <TeamBadge team={away} size={28} />
-                            </div>
-                            <span
-                              className={`text-sm font-semibold ${
-                                ok === true
-                                  ? "text-[var(--success)]"
-                                  : ok === false
-                                    ? "text-[var(--danger)]"
-                                    : "text-[var(--muted)]"
-                              }`}
-                            >
-                              {ok === true
-                                ? "Acierto"
-                                : ok === false
-                                  ? "Fallaste"
-                                  : "Sin pronóstico"}
-                              {myPred?.isCalculated ? ` · +${myPred.pointsEarned ?? 0} pts` : ""}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    {roundMatches.every((m) => m.status !== "finished") && (
-                      <p className="text-sm text-[var(--muted)]">
-                        Esta jornada aún no tiene resultados finales.
-                      </p>
-                    )}
+            <div>
+              <h2 className="text-lg font-bold">Ganadores por jornada</h2>
+              <p className="text-sm text-[var(--muted)]">
+                Ranking de cada jornada según los partidos ya finalizados.
+              </p>
+            </div>
+            {roundLeaderboards.map(({ round, finishedCount, entries }) => {
+              const hasPoints = entries.some((e) => e.totalPoints > 0);
+              const winner = entries[0];
+              return (
+                <div key={round.id} className="card space-y-3 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-bold">{round.name}</h3>
+                    <span className="text-xs text-[var(--muted)]">
+                      {finishedCount} {finishedCount === 1 ? "partido finalizado" : "partidos finalizados"}
+                    </span>
                   </div>
+                  {finishedCount === 0 ? (
+                    <p className="text-sm text-[var(--muted)]">
+                      Esta jornada aún no tiene resultados. El ranking aparecerá cuando terminen los
+                      partidos.
+                    </p>
+                  ) : !hasPoints ? (
+                    <p className="text-sm text-[var(--muted)]">
+                      Hay partidos finalizados pero aún no se han calculado los puntos.
+                    </p>
+                  ) : (
+                    <>
+                      {winner && winner.totalPoints > 0 && (
+                        <div className="rounded-xl border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-4 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">
+                            Líder de la jornada
+                          </p>
+                          <p className="mt-1 text-lg font-bold">
+                            #{winner.rank} {winner.username}
+                            {winner.userId === user?.id ? " (Tú)" : ""}
+                            <span className="ml-2 text-[var(--primary)]">
+                              {winner.totalPoints} pts · {winner.correctPredictions} aciertos
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      <LeaderboardList entries={entries} currentUserId={user?.id} compact />
+                    </>
+                  )}
                 </div>
-              ),
+              );
+            })}
+            {roundLeaderboards.length === 0 && (
+              <p className="text-sm text-[var(--muted)]">No hay jornadas en esta liga.</p>
             )}
           </section>
         </>
@@ -375,6 +363,98 @@ export default function QuinielaDetailPage() {
           </div>
         </div>
       </details>
+    </div>
+  );
+}
+
+function LeaderboardSection({
+  title,
+  subtitle,
+  entries,
+  currentUserId,
+  emptyMessage,
+  showWinner = false,
+}: {
+  title: string;
+  subtitle?: string;
+  entries: LeaderboardEntry[];
+  currentUserId?: string;
+  emptyMessage: string;
+  showWinner?: boolean;
+}) {
+  const hasPoints = entries.some((e) => e.totalPoints > 0);
+  const winner = entries[0];
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-lg font-bold">{title}</h2>
+        {subtitle && <p className="text-sm text-[var(--muted)]">{subtitle}</p>}
+      </div>
+      {!hasPoints ? (
+        <p className="text-sm text-[var(--muted)]">{emptyMessage}</p>
+      ) : (
+        <>
+          {showWinner && winner && winner.totalPoints > 0 && (
+            <div className="rounded-xl border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--primary)]">
+                Líder general
+              </p>
+              <p className="mt-1 text-lg font-bold">
+                #{winner.rank} {winner.username}
+                {winner.userId === currentUserId ? " (Tú)" : ""}
+                <span className="ml-2 text-[var(--primary)]">
+                  {winner.totalPoints} pts · {winner.correctPredictions} aciertos
+                </span>
+              </p>
+            </div>
+          )}
+          <LeaderboardList entries={entries} currentUserId={currentUserId} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function LeaderboardList({
+  entries,
+  currentUserId,
+  compact = false,
+}: {
+  entries: LeaderboardEntry[];
+  currentUserId?: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      {entries.map((entry) => (
+        <div
+          key={entry.userId}
+          className={`flex items-center gap-3 rounded-xl border px-4 ${
+            compact ? "py-2.5" : "py-3"
+          } ${
+            entry.userId === currentUserId
+              ? "border-[var(--primary)]/50 bg-[var(--primary)]/10"
+              : "border-[var(--border)] bg-[var(--elevated)]"
+          } ${entry.rank === 1 && entry.totalPoints > 0 ? "border-[var(--primary)]/30" : ""}`}
+        >
+          <span
+            className={`font-bold text-[var(--muted)] ${compact ? "w-7 text-sm" : "w-8"}`}
+          >
+            #{entry.rank}
+          </span>
+          <span className="flex-1 font-semibold">
+            {entry.username}
+            {entry.userId === currentUserId ? " (Tú)" : ""}
+          </span>
+          <span className={`text-[var(--muted)] ${compact ? "text-xs" : "text-sm"}`}>
+            {entry.correctPredictions} aciertos
+          </span>
+          <span className={`font-bold text-[var(--primary)] ${compact ? "text-sm" : ""}`}>
+            {entry.totalPoints} pts
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
